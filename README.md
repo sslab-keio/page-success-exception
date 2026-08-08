@@ -3,16 +3,40 @@
 - QEMU: https://github.com/tokyo4j/qemu/tree/page-success-exception
 - xv6: https://github.com/tokyo4j/xv6-riscv/tree/page-success-exception
 
-## Running
+## Prerequisites
+
+- [Nix](https://nixos.org/download/) must be installed. The Makefile enables the `nix-command` and `flakes` experimental features when invoking Nix.
+- `make` is required to run the build and launch commands.
+- `sudo` access is required when creating the device nodes in the BusyBox initramfs.
+
+## Building
 
 ```sh
 git clone https://github.com/tokyo4j/page-success-exception
 cd page-success-exception
-git submodule update --init
-just xv6
-just qemu-setup
-just qemu
-just run-xv6
+make build-all
+```
+
+`make build-all` builds QEMU, xv6, Linux, OpenSBI, BusyBox, and XVisor, then generates the BusyBox and XVisor initramfs images.
+
+## Running
+
+### Booting xv6
+
+```sh
+make run-xv6
+```
+
+### Booting Linux
+
+```sh
+make run-linux
+```
+
+### Booting XVisor
+
+```sh
+make run-xvisor
 ```
 
 ## Output
@@ -112,31 +136,3 @@ Like the RMP in AMD SEV-SNP, this table stores the enclave ID and virtual addres
 - `enclave_main()` calculates the Fibonacci sequence and stores its 32nd element in `fib_result`
 - `enclave_entry()` executes the `EEXIT` instruction and returns to the normal application
 - Print the contents of `fib_result`
-
-### Booting Xvisor
-
-```sh
-just qemu-setup
-just qemu
-just linux-setup
-just linux
-just xvisor-setup
-just xvisor
-just opensbi
-just busybox-setup
-just fs-xvisor
-just run-xvisor
-```
-
-### Booting Linux
-
-```sh
-just qemu-setup
-just qemu
-just linux-setup
-just linux
-just opensbi
-just busybox-setup
-just fs-linux
-just run-linux
-```

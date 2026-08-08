@@ -110,13 +110,11 @@
           repo = "linux";
           rev = "b320789d6883cc00ac78ce83bccbfe7ed58afcf0";
           sha256 = "sha256-xuwSwpzFV/YVHrSqJMQRjoMPhFzufP999bLfPGzyXO4=";
-          # sha256 = "0000000000000000000000000000000000000000000000000000";
         };
 
         nativeBuildInputs = [
           hostPkgs.bash
           hostPkgs.gnumake
-          # pkgs.gcc
           hostPkgs.binutils
           hostPkgs.bison
           hostPkgs.flex
@@ -146,9 +144,8 @@
           mkdir -p $out/linux/build
           cp -r $PWD/build/arch/riscv/boot/Image $out/linux/build/Image
         '';
-        # The image is $out/linux/build/arch/riscv/boot/Image
       };
-    in # end of let linux_pkg
+    in
     let opensbi_pkg =
       hostPkgs.stdenv.mkDerivation {
         name = "opensbi-pse";
@@ -158,14 +155,11 @@
           repo = "opensbi";
           rev = "f6e15b228491c3df87e35124a2e10aba65084b62";
           sha256 = "sha256-8U3rThmhoAfz9QmHYi0PF5d8SLknGy0zIDYZ3a7WvOI=";
-          # sha256 = "0000000000000000000000000000000000000000000000000000";
         };
 
         nativeBuildInputs = [
           hostPkgs.bash
           hostPkgs.python3
-          # pkgs.compiledb
-
           hostPkgs.gnumake
           riscv64Pkgs.binutils
           riscv64Pkgs.gcc
@@ -186,7 +180,7 @@
           make PLATFORM='generic' I=$out/opensbi install
         '';
       };
-    in # end of let opensbi_pkg
+    in
     let xvisor_pkg =
       hostPkgs.stdenv.mkDerivation {
         name = "xvisor-pse";
@@ -256,7 +250,6 @@
           owner = "tokyo4j";
           repo = "busybox";
           rev = "b4cedd4c9ae0ea31986973b7b3e6956937aafa32";
-          # sha256 = "0000000000000000000000000000000000000000000000000000";
           sha256 = "sha256-l01uowQ5vtmm8pbMAvx8L79ETx92XcHFDKyfO5zRPAw=";
         };
 
@@ -308,5 +301,4 @@
       };
       packages.x86_64-linux.xvisor = xvisor_pkg;
     };
-  # end of let outputs
 }

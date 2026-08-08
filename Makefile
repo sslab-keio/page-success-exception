@@ -55,6 +55,7 @@ build-all:
 	$(MAKE) build-qemu
 	$(MAKE) build-pkgs
 	$(MAKE) gen-busybox-initramfs
+	$(MAKE) gen-xvisor-initramfs
 
 run-xv6:
 	$(NIX) develop --ignore-environment '.#qemu' -c \

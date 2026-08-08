@@ -237,10 +237,20 @@
         '';
 
         installPhase = ''
-          mkdir -p $out/xvisor/build/tests/riscv/virt64/basic
+          mkdir -p $out/xvisor/build
           cp build/vmm.bin $out/xvisor/build/vmm.bin
-          cp build/tests/riscv/virt64/basic/firmware.bin \
-            $out/xvisor/build/tests/riscv/virt64/basic/firmware.bin
+          cp build/tests/riscv/virt64/basic/firmware.bin $out/xvisor/build/firmware.bin
+          cp docs/banner/roman.txt $out/xvisor/build/banner.txt
+          cp docs/logo/xvisor_logo_name.ppm $out/xvisor/build/logo.ppm
+          cp tests/riscv/virt64/linux/nor_flash.list $out/xvisor/build/nor_flash.list
+          cp tests/riscv/virt64/linux/cmdlist $out/xvisor/build/cmdlist
+          cp tests/riscv/virt64/xscript/one_guest_virt64.xscript $out/xvisor/build/boot.xscript
+          dtc -q -I dts -O dtb \
+            -o $out/xvisor/build/virt64-guest.dtb \
+            tests/riscv/virt64/virt64-guest.dts
+          dtc -q -I dts -O dtb \
+            -o $out/xvisor/build/virt64.dtb \
+            tests/riscv/virt64/linux/virt64.dts
         '';
       };
     in

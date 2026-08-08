@@ -29,8 +29,17 @@ build-pkgs:
 	cp --remove-destination ./result/linux/build/Image ./build/linux
 	cp --remove-destination ./result/opensbi/share/opensbi/lp64/generic/firmware/fw_dynamic.bin ./build/opensbi
 	cp --remove-destination ./result/busybox/busybox ./build/busybox
-	cp --remove-destination ./result/xvisor/build/vmm.bin ./build/xvisor
-	cp --remove-destination ./result/xvisor/build/tests/riscv/virt64/basic/firmware.bin ./build/xvisor
+	cp --remove-destination \
+		./result/xvisor/build/vmm.bin \
+		./result/xvisor/build/firmware.bin \
+		./result/xvisor/build/banner.txt \
+		./result/xvisor/build/logo.ppm \
+		./result/xvisor/build/nor_flash.list \
+		./result/xvisor/build/cmdlist \
+		./result/xvisor/build/boot.xscript \
+		./result/xvisor/build/virt64-guest.dtb \
+		./result/xvisor/build/virt64.dtb \
+		./build/xvisor
 
 gen-busybox-initramfs:
 	rm -rf $(INITRAMFS_DIR)
@@ -38,16 +47,16 @@ gen-busybox-initramfs:
 
 gen-xvisor-initramfs:
 	mkdir -p $(INITRAMFS_DIR)/system $(INITRAMFS_DIR)/images/riscv/virt64
-	cp xvisor/docs/banner/roman.txt $(INITRAMFS_DIR)/system/banner.txt
-	cp xvisor/docs/logo/xvisor_logo_name.ppm $(INITRAMFS_DIR)/system/logo.ppm
-	dtc -q -I dts -O dtb -o $(INITRAMFS_DIR)/images/riscv/virt64-guest.dtb xvisor/tests/riscv/virt64/virt64-guest.dts
-	cp build/xvisor/firmware.bin $(INITRAMFS_DIR)/images/riscv/virt64/firmware.bin
-	cp xvisor/tests/riscv/virt64/linux/nor_flash.list $(INITRAMFS_DIR)/images/riscv/virt64/nor_flash.list
-	cp xvisor/tests/riscv/virt64/linux/cmdlist $(INITRAMFS_DIR)/images/riscv/virt64/cmdlist
-	cp xvisor/tests/riscv/virt64/xscript/one_guest_virt64.xscript $(INITRAMFS_DIR)/boot.xscript
-	cp build/linux/Image $(INITRAMFS_DIR)/images/riscv/virt64/Image
-	dtc -q -I dts -O dtb -o $(INITRAMFS_DIR)/images/riscv/virt64/virt64.dtb xvisor/tests/riscv/virt64/linux/virt64.dts
-	cp $(INITRAMFS_DIR)/initramfs.cpio.gz $(INITRAMFS_DIR)/images/riscv/virt64/rootfs.img
+	cp --remove-destination build/xvisor/banner.txt $(INITRAMFS_DIR)/system/banner.txt
+	cp --remove-destination build/xvisor/logo.ppm $(INITRAMFS_DIR)/system/logo.ppm
+	cp --remove-destination build/xvisor/virt64-guest.dtb $(INITRAMFS_DIR)/images/riscv/virt64-guest.dtb
+	cp --remove-destination build/xvisor/firmware.bin $(INITRAMFS_DIR)/images/riscv/virt64/firmware.bin
+	cp --remove-destination build/xvisor/nor_flash.list $(INITRAMFS_DIR)/images/riscv/virt64/nor_flash.list
+	cp --remove-destination build/xvisor/cmdlist $(INITRAMFS_DIR)/images/riscv/virt64/cmdlist
+	cp --remove-destination build/xvisor/boot.xscript $(INITRAMFS_DIR)/boot.xscript
+	cp --remove-destination build/linux/Image $(INITRAMFS_DIR)/images/riscv/virt64/Image
+	cp --remove-destination build/xvisor/virt64.dtb $(INITRAMFS_DIR)/images/riscv/virt64/virt64.dtb
+	cp --remove-destination $(INITRAMFS_DIR)/initramfs.cpio.gz $(INITRAMFS_DIR)/images/riscv/virt64/rootfs.img
 	cd $(INITRAMFS_DIR) && find . -print0 | cpio --null --create --format=newc > ../xvisor-initrd.cpio
 
 build-all:

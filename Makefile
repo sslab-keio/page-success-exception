@@ -11,7 +11,7 @@ setup-qemu:
 	cd build/qemu && $(NIX) develop --ignore-environment '../..#qemu' -c \
     ../../qemu/configure \
     --target-list="riscv64-softmmu" \
-    --disable-fuse --disable-user --disable-curl #--enable-debug
+    --disable-fuse --disable-user --disable-curl --enable-debug
 
 build-qemu:
 	$(NIX) develop --ignore-environment '.#qemu' -c \

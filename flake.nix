@@ -18,6 +18,7 @@
     in
     let qemu_shell = # OK for xv6
       hostPkgs.mkShell {
+        hardeningDisable = [ "fortify" ];
         packages = with hostPkgs; [
           just
           clang

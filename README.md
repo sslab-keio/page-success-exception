@@ -19,6 +19,17 @@ make build-all
 
 `make build-all` builds QEMU, xv6, Linux, OpenSBI, BusyBox, and XVisor, then generates the BusyBox and XVisor initramfs images.
 
+### Building QEMU for debugging
+
+Set the Makefile variable `QEMU_DEBUG` to `1` when configuring QEMU to enable its debug build options:
+
+```sh
+make setup-qemu QEMU_DEBUG=1
+make build-qemu
+```
+
+When `QEMU_DEBUG` is omitted, QEMU is built without `--enable-debug`. `make build-all` always uses this non-debug configuration.
+
 ## Running
 
 ### Booting xv6

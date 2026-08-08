@@ -3,15 +3,22 @@
 
 NIX ?= nix --extra-experimental-features "nix-command flakes"
 INITRAMFS_DIR ?= build/initramfs
+QEMU_DEBUG ?= 0
+QEMU_CONFIGURE_FLAGS := --target-list="riscv64-softmmu" \
+	--disable-fuse --disable-user --disable-curl
+
+ifeq ($(QEMU_DEBUG),1)
+QEMU_CONFIGURE_FLAGS += --enable-debug
+else ifneq ($(QEMU_DEBUG),0)
+$(error QEMU_DEBUG must be either 0 or 1)
+endif
 
 setup-qemu:
 	$(NIX) develop --ignore-environment '.#qemu' -c \
 		git submodule update --init -- qemu
 	mkdir -p build/qemu
 	cd build/qemu && $(NIX) develop --ignore-environment '../..#qemu' -c \
-    ../../qemu/configure \
-    --target-list="riscv64-softmmu" \
-    --disable-fuse --disable-user --disable-curl --enable-debug
+		../../qemu/configure $(QEMU_CONFIGURE_FLAGS)
 
 build-qemu:
 	$(NIX) develop --ignore-environment '.#qemu' -c \
@@ -60,7 +67,7 @@ gen-xvisor-initramfs:
 	cd $(INITRAMFS_DIR) && find . -print0 | cpio --null --create --format=newc > ../xvisor-initrd.cpio
 
 build-all:
-	$(MAKE) setup-qemu
+	$(MAKE) setup-qemu QEMU_DEBUG=0
 	$(MAKE) build-qemu
 	$(MAKE) build-pkgs
 	$(MAKE) gen-busybox-initramfs

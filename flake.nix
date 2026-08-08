@@ -200,6 +200,49 @@
         '';
       };
     in # end of let opensbi_pkg
+    let xvisor_pkg =
+      hostPkgs.stdenv.mkDerivation {
+        name = "xvisor-pse";
+
+        src = hostPkgs.fetchFromGitHub {
+          owner = "tokyo4j";
+          repo = "xvisor";
+          rev = "03109cd214783a5fe1eda4a7538547239a3b0095";
+          sha256 = "sha256-mLIIHgIRMaN87dvI36tTa2mTTzKbAqqETXQsqhJy2hg=";
+        };
+
+        nativeBuildInputs = [
+          hostPkgs.gnumake
+          hostPkgs.dtc
+          hostPkgs.python3
+          hostPkgs.pkgsCross.riscv64-embedded.gcc
+          hostPkgs.pkgsCross.riscv64-embedded.buildPackages.binutils
+        ];
+
+        configurePhase = ''
+          patchShebangs tools
+          make O=$PWD/build \
+            ARCH=riscv \
+            CROSS_COMPILE=riscv64-none-elf- \
+            generic-64b-defconfig
+        '';
+
+        buildPhase = ''
+          make ARCH=riscv CROSS_COMPILE=riscv64-none-elf- -j$(nproc) VERBOSE=y
+          make -C tests/riscv/virt64/basic \
+            ARCH=riscv \
+            CROSS_COMPILE=riscv64-none-elf- \
+            -j$(nproc) VERBOSE=y
+        '';
+
+        installPhase = ''
+          mkdir -p $out/xvisor/build/tests/riscv/virt64/basic
+          cp build/vmm.bin $out/xvisor/build/vmm.bin
+          cp build/tests/riscv/virt64/basic/firmware.bin \
+            $out/xvisor/build/tests/riscv/virt64/basic/firmware.bin
+        '';
+      };
+    in
     let busybox_pkgs =
       let riscv64MuslPkgs =
         import nixpkgs {
@@ -263,9 +306,11 @@
           xv6_pkg
           linux_pkg
           opensbi_pkg
+          xvisor_pkg
           busybox_pkgs
         ];
       };
+      packages.x86_64-linux.xvisor = xvisor_pkg;
     };
   # end of let outputs
 }

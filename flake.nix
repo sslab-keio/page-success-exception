@@ -16,7 +16,7 @@
         };
       };
     in
-    let qemu_shell = # OK for xv6
+    let qemu_shell =
       hostPkgs.mkShell {
         hardeningDisable = [ "fortify" ];
         packages = with hostPkgs; [
@@ -35,7 +35,7 @@
         '';
       };
     in
-    let xvisor_shell = # OK?
+    let xvisor_shell =
       hostPkgs.mkShell {
         packages = [
           hostPkgs.just
@@ -46,7 +46,7 @@
         ];
       };
     in
-    let linux_shell = # OK?
+    let linux_shell =
       let hostPkgs = import nixpkgs { system = host_system; }; in
       hostPkgs.mkShell {
         packages = [
@@ -63,7 +63,7 @@
         ];
       };
     in
-    let opensbi_shell = # OK?
+    let opensbi_shell =
       hostPkgs.mkShell {
         packages = with hostPkgs; [
           just
@@ -72,20 +72,6 @@
         ];
       };
     in
-    # let busybox_shell = # OK?
-    #   hostPkgs.mkShell {
-    #     packages = [
-    #       riscvMuslPkgs.gcc
-    #       riscvMuslPkgs.musl
-    #       riscvMuslPkgs.pkgsStatic.glib
-    #       riscvMuslPkgs.pkgsStatic.gcc
-    #       hostPkgs.gnumake
-    #       hostPkgs.just
-    #       hostPkgs.cpio
-    #       hostPkgs.dtc
-    #     ];
-    #   };
-    # in
     let xv6_pkg =
       hostPkgs.stdenv.mkDerivation {
         name = "xv6-riscv-pse";
@@ -308,7 +294,6 @@
         linux = linux_shell;
         xvisor = xvisor_shell;
         opensbi = opensbi_shell;
-        # busybox = busybox_shell;
       };
       packages.x86_64-linux.default = hostPkgs.symlinkJoin {
         name = "combined";

@@ -23,11 +23,13 @@ make build-all
 
 The flake provides a development shell for each component. Each shell uses the same build dependencies as the corresponding Nix package, so a locally modified submodule can be built in an environment similar to the package build.
 
-First, initialize the submodules that you want to modify:
+First, initialize all local-development submodules with Git provided by Nix:
 
 ```sh
-git submodule update --init -- xv6-riscv linux xvisor busybox opensbi
+make setup-local-pkgs
 ```
+
+To initialize only one component, use `make setup-xv6`, `make setup-linux`, `make setup-xvisor`, `make setup-busybox`, or `make setup-opensbi`. The local build targets run their corresponding setup target automatically, so the host system's Git command is not used.
 
 Enter the appropriate development shell from the repository root, then move into the component's source directory:
 
@@ -48,6 +50,20 @@ make fs.img kernel/kernel
 ```
 
 The Linux, XVisor, BusyBox, and OpenSBI shells also set the cross-compilation environment variables used by their Nix package builds, such as `ARCH`, `CROSS_COMPILE`, `PLATFORM`, and `FW_TEXT_START` where applicable. Changes made inside the submodule remain in the local checkout and can be rebuilt repeatedly without changing the source revision in `flake.nix`.
+
+The Makefile provides targets that build the local submodule sources in these development shells and replace the corresponding artifacts under `build/`:
+
+```sh
+make build-local-xv6
+make build-local-linux
+make build-local-opensbi
+make build-local-busybox
+make build-local-xvisor
+```
+
+Use `make build-local-pkgs` to run all five targets. Use `make build-local-all` to also regenerate the BusyBox and XVisor initramfs images. Like `make build-all`, initramfs generation may require `sudo` to create device nodes.
+
+After a local build, the existing `make run-xv6`, `make run-linux`, and `make run-xvisor` commands use the replaced artifacts from `build/`. Running `make build-pkgs` again replaces them with artifacts produced by `nix build`.
 
 ### Building QEMU for debugging
 

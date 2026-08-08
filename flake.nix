@@ -60,6 +60,7 @@
           pkg-config
           glib
           git
+          openssh
           ncurses
         ];
         shellHook = ''

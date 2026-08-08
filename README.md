@@ -19,6 +19,36 @@ make build-all
 
 `make build-all` builds QEMU, xv6, Linux, OpenSBI, BusyBox, and XVisor, then generates the BusyBox and XVisor initramfs images.
 
+### Local development environments
+
+The flake provides a development shell for each component. Each shell uses the same build dependencies as the corresponding Nix package, so a locally modified submodule can be built in an environment similar to the package build.
+
+First, initialize the submodules that you want to modify:
+
+```sh
+git submodule update --init -- xv6-riscv linux xvisor busybox opensbi
+```
+
+Enter the appropriate development shell from the repository root, then move into the component's source directory:
+
+| Component | Development shell | Source directory |
+| --- | --- | --- |
+| xv6 | `nix develop .#xv6` | `xv6-riscv/` |
+| Linux | `nix develop .#linux` | `linux/` |
+| XVisor | `nix develop .#xvisor` | `xvisor/` |
+| BusyBox | `nix develop .#busybox` | `busybox/` |
+| OpenSBI | `nix develop .#opensbi` | `opensbi/` |
+
+For example, to work on xv6:
+
+```sh
+nix develop .#xv6
+cd xv6-riscv
+make fs.img kernel/kernel
+```
+
+The Linux, XVisor, BusyBox, and OpenSBI shells also set the cross-compilation environment variables used by their Nix package builds, such as `ARCH`, `CROSS_COMPILE`, `PLATFORM`, and `FW_TEXT_START` where applicable. Changes made inside the submodule remain in the local checkout and can be rebuilt repeatedly without changing the source revision in `flake.nix`.
+
 ### Building QEMU for debugging
 
 Set the Makefile variable `QEMU_DEBUG` to `1` when configuring QEMU to enable its debug build options:

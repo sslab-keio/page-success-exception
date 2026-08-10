@@ -1,7 +1,13 @@
 
-.PHONY: setup-qemu build-qemu build-pkgs gen-busybox-initramfs gen-xvisor-initramfs build-all run-xv6 run-xvisor run-linux
+.PHONY: setup-qemu setup-local-pkgs setup-xv6 setup-linux setup-opensbi \
+	setup-busybox setup-xvisor build-qemu build-pkgs build-local-pkgs build-local-all \
+	build-local-xv6 build-local-linux build-local-opensbi \
+	build-local-busybox build-local-xvisor \
+	gen-busybox-initramfs gen-xvisor-initramfs build-all \
+	run-xv6 run-xvisor run-linux clean
 
 NIX ?= nix --extra-experimental-features "nix-command flakes"
+NIX_GIT = $(NIX) develop --ignore-environment --keep-env-var SSH_AUTH_SOCK '.\#qemu' -c git
 INITRAMFS_DIR ?= build/initramfs
 QEMU_DEBUG ?= 0
 QEMU_CONFIGURE_FLAGS := --target-list="riscv64-softmmu" \
@@ -14,11 +20,27 @@ $(error QEMU_DEBUG must be either 0 or 1)
 endif
 
 setup-qemu:
-	$(NIX) develop --ignore-environment '.#qemu' -c \
-		git submodule update --init -- qemu
+	$(NIX_GIT) submodule update --init -- qemu
 	mkdir -p build/qemu
 	cd build/qemu && $(NIX) develop --ignore-environment '../..#qemu' -c \
 		../../qemu/configure $(QEMU_CONFIGURE_FLAGS)
+
+setup-xv6:
+	$(NIX_GIT) submodule update --init -- xv6-riscv
+
+setup-linux:
+	$(NIX_GIT) submodule update --init -- linux
+
+setup-opensbi:
+	$(NIX_GIT) submodule update --init -- opensbi
+
+setup-busybox:
+	$(NIX_GIT) submodule update --init -- busybox
+
+setup-xvisor:
+	$(NIX_GIT) submodule update --init -- xvisor
+
+setup-local-pkgs: setup-xv6 setup-linux setup-opensbi setup-busybox setup-xvisor
 
 build-qemu:
 	$(NIX) develop --ignore-environment '.#qemu' -c \
@@ -47,6 +69,78 @@ build-pkgs:
 		./result/xvisor/build/virt64-guest.dtb \
 		./result/xvisor/build/virt64.dtb \
 		./build/xvisor
+
+build-local-xv6: setup-xv6
+	$(NIX) develop --ignore-environment '.#xv6' -c \
+		make -C xv6-riscv fs.img kernel/kernel -j$(shell nproc)
+	mkdir -p build/xv6
+	cp --remove-destination xv6-riscv/fs.img xv6-riscv/kernel/kernel build/xv6
+	chmod u+w build/xv6/fs.img
+
+build-local-linux: setup-linux
+	mkdir -p linux/build
+	$(NIX) develop --ignore-environment '.#linux' -c \
+		make -C linux O=$(CURDIR)/linux/build defconfig
+	mkdir -p linux/build/scripts
+	cp linux/scripts/config linux/build/scripts/config
+	$(NIX) develop --ignore-environment '.#linux' -c \
+		bash linux/build/scripts/config --file linux/build/.config \
+		-d CONFIG_DRM -d CONFIG_TRANSPARENT_HUGEPAGE
+	$(NIX) develop --ignore-environment '.#linux' -c \
+		make -C linux O=$(CURDIR)/linux/build -j$(shell nproc) Image
+	mkdir -p build/linux
+	cp --remove-destination linux/build/arch/riscv/boot/Image build/linux/Image
+
+build-local-opensbi: setup-opensbi
+	$(NIX) develop --ignore-environment '.#opensbi' -c \
+		make -C opensbi -j$(shell nproc)
+	mkdir -p build/opensbi
+	cp --remove-destination \
+		opensbi/build/platform/generic/firmware/fw_dynamic.bin \
+		build/opensbi/fw_dynamic.bin
+
+build-local-busybox: setup-busybox
+	$(NIX) develop --ignore-environment '.#busybox' -c \
+		make -C busybox V=1 defconfig
+	$(NIX) develop --ignore-environment '.#busybox' -c \
+		sed -i \
+		-e 's/CONFIG_TC=y/CONFIG_TC=n/' \
+		-e 's/CONFIG_FEATURE_TC_INGRESS=y/CONFIG_FEATURE_TC_INGRESS=n/' \
+		-e 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' \
+		busybox/.config
+	$(NIX) develop --ignore-environment '.#busybox' -c \
+		make -C busybox V=1 -j$(shell nproc)
+	mkdir -p build/busybox
+	cp --remove-destination busybox/busybox build/busybox/busybox
+
+build-local-xvisor: setup-xvisor
+	mkdir -p xvisor/build
+	$(NIX) develop --ignore-environment '.#xvisor' -c \
+		make -C xvisor O=$(CURDIR)/xvisor/build generic-64b-defconfig
+	$(NIX) develop --ignore-environment '.#xvisor' -c \
+		make -C xvisor -j$(shell nproc) VERBOSE=y
+	$(NIX) develop --ignore-environment '.#xvisor' -c \
+		make -C xvisor/tests/riscv/virt64/basic -j$(shell nproc) VERBOSE=y
+	mkdir -p build/xvisor
+	cp --remove-destination xvisor/build/vmm.bin build/xvisor/vmm.bin
+	cp --remove-destination xvisor/build/tests/riscv/virt64/basic/firmware.bin build/xvisor/firmware.bin
+	cp --remove-destination xvisor/docs/banner/roman.txt build/xvisor/banner.txt
+	cp --remove-destination xvisor/docs/logo/xvisor_logo_name.ppm build/xvisor/logo.ppm
+	cp --remove-destination xvisor/tests/riscv/virt64/linux/nor_flash.list build/xvisor/nor_flash.list
+	cp --remove-destination xvisor/tests/riscv/virt64/linux/cmdlist build/xvisor/cmdlist
+	cp --remove-destination xvisor/tests/riscv/virt64/xscript/one_guest_virt64.xscript build/xvisor/boot.xscript
+	$(NIX) develop --ignore-environment '.#xvisor' -c \
+		dtc -q -I dts -O dtb -o build/xvisor/virt64-guest.dtb \
+		xvisor/tests/riscv/virt64/virt64-guest.dts
+	$(NIX) develop --ignore-environment '.#xvisor' -c \
+		dtc -q -I dts -O dtb -o build/xvisor/virt64.dtb \
+		xvisor/tests/riscv/virt64/linux/virt64.dts
+
+build-local-pkgs: build-local-xv6 build-local-linux build-local-opensbi build-local-busybox build-local-xvisor
+
+build-local-all: build-local-pkgs
+	$(MAKE) gen-busybox-initramfs
+	$(MAKE) gen-xvisor-initramfs
 
 gen-busybox-initramfs:
 	rm -rf $(INITRAMFS_DIR)
@@ -111,5 +205,5 @@ run-linux:
 		-append "console=ttyS0 init=/init"
 
 clean:
-	rm result
+	rm -f result
 	rm -rf build

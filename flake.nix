@@ -7,89 +7,121 @@
 
   outputs = { self, nixpkgs }:
     let host_system = "x86_64-linux"; in
-    let hostPkgs = import nixpkgs { system = host_system; }; in
-    let riscv64Pkgs =
-      import nixpkgs {
-        system = host_system;
-        crossSystem = {
-          config = "riscv64-unknown-linux-gnu";
-        };
-      };
-    in
+    let pkgs = import nixpkgs { system = host_system; }; in
+    let xv6_build_inputs = [
+      pkgs.perl
+      pkgs.gnumake
+      pkgs.pkgsCross.riscv64.binutils
+      pkgs.pkgsCross.riscv64.gcc
+    ]; in
+    let linux_build_inputs = [
+      pkgs.bash
+      pkgs.gnumake
+      pkgs.binutils
+      pkgs.bison
+      pkgs.flex
+      pkgs.bc
+      pkgs.pkgsCross.riscv64.binutils
+      pkgs.pkgsCross.riscv64.gcc
+    ]; in
+    let opensbi_build_inputs = [
+      pkgs.bash
+      pkgs.python3
+      pkgs.gnumake
+      pkgs.pkgsCross.riscv64.binutils
+      pkgs.pkgsCross.riscv64.gcc
+    ]; in
+    let xvisor_build_inputs = [
+      pkgs.gnumake
+      pkgs.dtc
+      pkgs.python3
+      pkgs.pkgsCross.riscv64-embedded.gcc
+      pkgs.pkgsCross.riscv64-embedded.buildPackages.binutils
+    ]; in
+    let busybox_build_inputs = [
+      pkgs.cpio
+      pkgs.dtc
+      pkgs.pkgsCross.riscv64-musl.gnumake
+      pkgs.pkgsCross.riscv64-musl.pkgsStatic.glib
+      pkgs.pkgsCross.riscv64-musl.pkgsStatic.gcc
+      pkgs.pkgsCross.riscv64-musl.gcc
+      pkgs.pkgsCross.riscv64-musl.glib
+      pkgs.gcc
+    ]; in
+    let qemu_build_inputs = [
+      pkgs.clang
+      pkgs.python313
+      pkgs.python313Packages.distlib
+      pkgs.ninja
+      pkgs.pkg-config
+      pkgs.glib
+      pkgs.git
+      pkgs.openssh
+      pkgs.ncurses
+    ]; in
     let qemu_shell =
-      hostPkgs.mkShell {
+      pkgs.mkShell {
         hardeningDisable = [ "fortify" ];
-        packages = with hostPkgs; [
-          just
-          clang
-          python313
-          python313Packages.distlib
-          ninja
-          pkg-config
-          glib
-          git
-          ncurses
-        ];
+        packages = qemu_build_inputs;
         shellHook = ''
           export CC=clang
         '';
       };
     in
+    let xv6_shell =
+      pkgs.mkShell {
+        packages = xv6_build_inputs;
+      };
+    in
     let xvisor_shell =
-      hostPkgs.mkShell {
-        packages = [
-          hostPkgs.just
-          hostPkgs.git
-          hostPkgs.pkgsCross.riscv64-embedded.gcc
-          hostPkgs.pkgsCross.riscv64-embedded.buildPackages.binutils
-          hostPkgs.python313
-        ];
+      pkgs.mkShell {
+        packages = xvisor_build_inputs;
+        shellHook = ''
+          export ARCH=riscv
+          export CROSS_COMPILE=riscv64-none-elf-
+        '';
       };
     in
     let linux_shell =
-      let hostPkgs = import nixpkgs { system = host_system; }; in
-      hostPkgs.mkShell {
-        packages = [
-          hostPkgs.just
-          hostPkgs.bash
-          hostPkgs.gnumake
-          hostPkgs.binutils
-          hostPkgs.bison
-          hostPkgs.flex
-          hostPkgs.bc
-
-          riscv64Pkgs.binutils
-          riscv64Pkgs.gcc
-        ];
+      pkgs.mkShell {
+        packages = linux_build_inputs;
+        shellHook = ''
+          export ARCH=riscv
+          export CROSS_COMPILE=riscv64-unknown-linux-gnu-
+        '';
       };
     in
     let opensbi_shell =
-      hostPkgs.mkShell {
-        packages = with hostPkgs; [
-          just
-          pkgsCross.riscv64.buildPackages.gcc
-          python313
-        ];
+      pkgs.mkShell {
+        packages = opensbi_build_inputs;
+        shellHook = ''
+          export CROSS_COMPILE=riscv64-unknown-linux-gnu-
+          export PLATFORM=generic
+          export FW_TEXT_START=0x80000000
+        '';
+      };
+    in
+    let busybox_shell =
+      pkgs.mkShell {
+        packages = busybox_build_inputs;
+        shellHook = ''
+          export ARCH=riscv
+          export CROSS_COMPILE=riscv64-unknown-linux-musl-
+        '';
       };
     in
     let xv6_pkg =
-      hostPkgs.stdenv.mkDerivation {
+      pkgs.stdenv.mkDerivation {
         name = "xv6-riscv-pse";
 
-        src = hostPkgs.fetchFromGitHub {
+        src = pkgs.fetchFromGitHub {
           owner = "tokyo4j";
           repo = "xv6-riscv";
           rev = "8662adf08ee541b54d4ec6b44881973d9f6f5e62";
           sha256 = "sha256-xDORtJ4piDz/sWSGPJtbdPUsfCqew9FFdlcxEfzaCy0=";
         };
 
-        nativeBuildInputs = [
-          hostPkgs.perl
-          hostPkgs.gnumake
-
-          riscv64Pkgs.binutils
-          riscv64Pkgs.gcc
-        ];
+        nativeBuildInputs = xv6_build_inputs;
 
         buildPhase = ''
           make fs.img kernel/kernel -j$(nproc)
@@ -102,27 +134,17 @@
       };
     in
     let linux_pkg =
-      hostPkgs.stdenv.mkDerivation {
+      pkgs.stdenv.mkDerivation {
         name = "linux-kernel-pse";
 
-        src = hostPkgs.fetchFromGitHub {
+        src = pkgs.fetchFromGitHub {
           owner = "tokyo4j";
           repo = "linux";
           rev = "b320789d6883cc00ac78ce83bccbfe7ed58afcf0";
           sha256 = "sha256-xuwSwpzFV/YVHrSqJMQRjoMPhFzufP999bLfPGzyXO4=";
         };
 
-        nativeBuildInputs = [
-          hostPkgs.bash
-          hostPkgs.gnumake
-          hostPkgs.binutils
-          hostPkgs.bison
-          hostPkgs.flex
-          hostPkgs.bc
-
-          riscv64Pkgs.binutils
-          riscv64Pkgs.gcc
-        ];
+        nativeBuildInputs = linux_build_inputs;
 
         configurePhase = ''
           export O=$PWD/build
@@ -147,23 +169,17 @@
       };
     in
     let opensbi_pkg =
-      hostPkgs.stdenv.mkDerivation {
+      pkgs.stdenv.mkDerivation {
         name = "opensbi-pse";
 
-        src = hostPkgs.fetchFromGitHub {
+        src = pkgs.fetchFromGitHub {
           owner = "tokyo4j";
           repo = "opensbi";
           rev = "f6e15b228491c3df87e35124a2e10aba65084b62";
           sha256 = "sha256-8U3rThmhoAfz9QmHYi0PF5d8SLknGy0zIDYZ3a7WvOI=";
         };
 
-        nativeBuildInputs = [
-          hostPkgs.bash
-          hostPkgs.python3
-          hostPkgs.gnumake
-          riscv64Pkgs.binutils
-          riscv64Pkgs.gcc
-        ];
+        nativeBuildInputs = opensbi_build_inputs;
 
         configurePhase = ''
           substituteInPlace $PWD/scripts/Kconfiglib/defconfig.py --replace-fail '#!/usr/bin/env python3' "#!$(command -v python3)"
@@ -182,23 +198,17 @@
       };
     in
     let xvisor_pkg =
-      hostPkgs.stdenv.mkDerivation {
+      pkgs.stdenv.mkDerivation {
         name = "xvisor-pse";
 
-        src = hostPkgs.fetchFromGitHub {
+        src = pkgs.fetchFromGitHub {
           owner = "tokyo4j";
           repo = "xvisor";
           rev = "03109cd214783a5fe1eda4a7538547239a3b0095";
           sha256 = "sha256-mLIIHgIRMaN87dvI36tTa2mTTzKbAqqETXQsqhJy2hg=";
         };
 
-        nativeBuildInputs = [
-          hostPkgs.gnumake
-          hostPkgs.dtc
-          hostPkgs.python3
-          hostPkgs.pkgsCross.riscv64-embedded.gcc
-          hostPkgs.pkgsCross.riscv64-embedded.buildPackages.binutils
-        ];
+        nativeBuildInputs = xvisor_build_inputs;
 
         configurePhase = ''
           patchShebangs tools
@@ -234,35 +244,18 @@
         '';
       };
     in
-    let busybox_pkgs =
-      let riscv64MuslPkgs =
-        import nixpkgs {
-          system = host_system;
-          crossSystem = {
-            config = "riscv64-unknown-linux-musl";
-          };
-        };
-      in
-      riscv64MuslPkgs.stdenv.mkDerivation {
+    let busybox_pkg =
+      pkgs.pkgsCross.riscv64-musl.stdenv.mkDerivation {
         name = "busybox-pse";
 
-        src = hostPkgs.fetchFromGitHub {
+        src = pkgs.fetchFromGitHub {
           owner = "tokyo4j";
           repo = "busybox";
           rev = "b4cedd4c9ae0ea31986973b7b3e6956937aafa32";
           sha256 = "sha256-l01uowQ5vtmm8pbMAvx8L79ETx92XcHFDKyfO5zRPAw=";
         };
 
-        nativeBuildInputs = [
-          hostPkgs.cpio
-          hostPkgs.dtc
-          riscv64MuslPkgs.gnumake
-          riscv64MuslPkgs.pkgsStatic.glib
-          riscv64MuslPkgs.pkgsStatic.gcc
-          riscv64MuslPkgs.gcc
-          riscv64MuslPkgs.glib
-          hostPkgs.gcc
-        ];
+        nativeBuildInputs = busybox_build_inputs;
 
         configurePhase = ''
           CROSS_COMPILE='riscv64-unknown-linux-musl-' ARCH='riscv' make V=1 defconfig
@@ -284,11 +277,13 @@
     {
       devShells.x86_64-linux = {
         qemu = qemu_shell;
+        xv6 = xv6_shell;
         linux = linux_shell;
         xvisor = xvisor_shell;
         opensbi = opensbi_shell;
+        busybox = busybox_shell;
       };
-      packages.x86_64-linux.default = hostPkgs.symlinkJoin {
+      packages.x86_64-linux.default = pkgs.symlinkJoin {
         name = "combined";
 
         paths = [
@@ -296,7 +291,7 @@
           linux_pkg
           opensbi_pkg
           xvisor_pkg
-          busybox_pkgs
+          busybox_pkg
         ];
       };
       packages.x86_64-linux.xvisor = xvisor_pkg;

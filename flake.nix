@@ -48,21 +48,21 @@
       pkgs.pkgsCross.riscv64-musl.glib
       pkgs.gcc
     ]; in
+    let qemu_build_inputs = [
+      pkgs.clang
+      pkgs.python313
+      pkgs.python313Packages.distlib
+      pkgs.ninja
+      pkgs.pkg-config
+      pkgs.glib
+      pkgs.git
+      pkgs.openssh
+      pkgs.ncurses
+    ]; in
     let qemu_shell =
       pkgs.mkShell {
         hardeningDisable = [ "fortify" ];
-        packages = with pkgs; [
-          just
-          clang
-          python313
-          python313Packages.distlib
-          ninja
-          pkg-config
-          glib
-          git
-          openssh
-          ncurses
-        ];
+        packages = qemu_build_inputs;
         shellHook = ''
           export CC=clang
         '';
@@ -244,7 +244,7 @@
         '';
       };
     in
-    let busybox_pkgs =
+    let busybox_pkg =
       pkgs.pkgsCross.riscv64-musl.stdenv.mkDerivation {
         name = "busybox-pse";
 
@@ -291,7 +291,7 @@
           linux_pkg
           opensbi_pkg
           xvisor_pkg
-          busybox_pkgs
+          busybox_pkg
         ];
       };
       packages.x86_64-linux.xvisor = xvisor_pkg;

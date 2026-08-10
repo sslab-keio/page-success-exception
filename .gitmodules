@@ -1,18 +1,18 @@
 [submodule "xv6-riscv"]
-	path = xv6-riscv
+	path = qemu-simulation/xv6-riscv
 	url = git@github.com:tokyo4j/xv6-riscv.git
 [submodule "qemu"]
-	path = qemu
+	path = qemu-simulation/qemu
 	url = git@github.com:tokyo4j/qemu.git
 [submodule "opensbi"]
-	path = opensbi
+	path = qemu-simulation/opensbi
 	url = git@github.com:tokyo4j/opensbi.git
 [submodule "busybox"]
-	path = busybox
+	path = qemu-simulation/busybox
 	url = git@github.com:tokyo4j/busybox.git
 [submodule "linux"]
-	path = linux
+	path = qemu-simulation/linux
 	url = git@github.com:tokyo4j/linux.git
 [submodule "xvisor"]
-	path = xvisor
+	path = qemu-simulation/xvisor
 	url = git@github.com:tokyo4j/xvisor.git

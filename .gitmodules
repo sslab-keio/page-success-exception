@@ -16,3 +16,6 @@
 [submodule "xvisor"]
 	path = qemu-simulation/xvisor
 	url = git@github.com:tokyo4j/xvisor.git
+[submodule "p550-simulation/riscv-linux"]
+	path = p550-simulation/riscv-linux
+	url = git@github.com:terufumi-hata/riscv-linux.git

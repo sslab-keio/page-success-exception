@@ -7,12 +7,39 @@
 
   outputs = { nixpkgs, ... }:
     let host_system = "x86_64-linux"; in
-    let hostPkgs = import nixpkgs { system = host_system; }; in
+    let pkgs = import nixpkgs { system = host_system; }; in
+    let linux_build_inputs = [
+      pkgs.bash
+      pkgs.perl
+      pkgs.gnumake
+      pkgs.binutils
+      pkgs.bison
+      pkgs.flex
+      pkgs.bc
+      pkgs.cpio
+      pkgs.pkg-config
+      pkgs.openssl.dev
+      pkgs.openssl.out
+      pkgs.zstd
+      pkgs.kmod
+      pkgs.dpkg
+      pkgs.pkgsCross.riscv64.buildPackages.gcc
+      pkgs.pkgsCross.riscv64.buildPackages.binutils
+    ]; in
+    let linux_shell =
+      pkgs.mkShell {
+        packages = linux_build_inputs;
+        shellHook = ''
+          export ARCH=riscv
+          export CROSS_COMPILE=riscv64-unknown-linux-gnu-
+        '';
+      };
+    in
     let linux_pkg =
-      hostPkgs.stdenv.mkDerivation {
+      pkgs.stdenv.mkDerivation {
         name = "linux-kernel-pse";
 
-        src = hostPkgs.fetchFromGitHub {
+        src = pkgs.fetchFromGitHub {
           owner = "terufumi-hata";
           repo = "riscv-linux";
           rev = "48419e79564f3b48d42f8dba500f5ed5ea30fd66";
@@ -21,24 +48,7 @@
 
         kernelConfig = ./p550.config;
 
-        nativeBuildInputs = [
-          hostPkgs.bash
-          hostPkgs.perl
-          hostPkgs.gnumake
-          hostPkgs.binutils
-          hostPkgs.bison
-          hostPkgs.flex
-          hostPkgs.bc
-          hostPkgs.cpio
-          hostPkgs.pkg-config
-          hostPkgs.openssl.dev
-          hostPkgs.openssl.out
-          hostPkgs.zstd
-          hostPkgs.kmod
-          hostPkgs.dpkg
-          hostPkgs.pkgsCross.riscv64.buildPackages.gcc
-          hostPkgs.pkgsCross.riscv64.buildPackages.binutils
-        ];
+        nativeBuildInputs = linux_build_inputs;
 
         configurePhase = ''
           makeFlagsArray+=(
@@ -152,6 +162,7 @@
       };
     in
     {
+      devShells.x86_64-linux.linux = linux_shell;
       packages.x86_64-linux.default = linux_pkg;
       packages.x86_64-linux.linux = linux_pkg;
     };

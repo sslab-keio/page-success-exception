@@ -1,2 +1,5 @@
 /build/
 /result
+/p550-simulation/result
+/qemu-simulation/build/
+/qemu-simulation/result

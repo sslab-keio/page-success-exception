@@ -4,7 +4,7 @@ This directory contains the implementation and experiments used to evaluate the 
 
 Because the proposed hardware support is not implemented directly in the processor, the experiments use software techniques on the physical machine to simulate its expected performance effects. This evaluation complements the QEMU implementation by focusing on performance behavior under realistic hardware conditions.
 
-Build scripts, experiment programs, measurement tools, results, and documentation specific to the P550 evaluation belong in this directory.
+This directory contains the build scripts, experiment programs, and measurement tools for the P550 evaluation. This README provides an overview of the experimental methodology.
 
 ## Performance simulation
 

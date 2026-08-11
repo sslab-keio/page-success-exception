@@ -8,6 +8,7 @@
   outputs = { nixpkgs, ... }:
     let host_system = "x86_64-linux"; in
     let pkgs = import nixpkgs { system = host_system; }; in
+    let riscv64_pkgs = pkgs.pkgsCross.riscv64; in
     let linux_build_inputs = [
       pkgs.bash
       pkgs.perl
@@ -23,8 +24,8 @@
       pkgs.zstd
       pkgs.kmod
       pkgs.dpkg
-      pkgs.pkgsCross.riscv64.buildPackages.gcc
-      pkgs.pkgsCross.riscv64.buildPackages.binutils
+      riscv64_pkgs.buildPackages.gcc
+      riscv64_pkgs.buildPackages.binutils
     ]; in
     let linux_shell =
       pkgs.mkShell {
@@ -161,10 +162,70 @@
         # The image is $out/linux/build/arch/riscv/boot/Image
       };
     in
+    let pse_programs_build_inputs = [
+      riscv64_pkgs.pkgsStatic.stdenv.cc
+    ]; in
+    let pse_programs_shell =
+      pkgs.mkShell {
+        packages = pse_programs_build_inputs;
+        shellHook = ''
+          export CC=riscv64-unknown-linux-musl-gcc
+          export CFLAGS="''${CFLAGS:--O2 -Wall -Wextra -Werror -static}"
+        '';
+      };
+    in
+    let pse_programs_pkg =
+      pkgs.stdenv.mkDerivation {
+        pname = "pse-programs";
+        version = "0.1.0";
+        src = ./.;
+
+        nativeBuildInputs = pse_programs_build_inputs;
+
+        dontConfigure = true;
+
+        buildPhase = ''
+          runHook preBuild
+
+          for target in pse_phase1 pse_multirange pse_microbench; do
+            riscv64-unknown-linux-musl-gcc \
+              -O2 -Wall -Wextra -Werror -static \
+              -o "$target" "$target.c"
+          done
+
+          runHook postBuild
+        '';
+
+        installPhase = ''
+          runHook preInstall
+
+          mkdir -p "$out/bin"
+          install -m755 \
+            pse_phase1 \
+            pse_multirange \
+            pse_microbench \
+            "$out/bin/"
+
+          runHook postInstall
+        '';
+      };
+    in
+    let combined_pkg =
+      pkgs.symlinkJoin {
+        name = "p550-simulation";
+        paths = [
+          linux_pkg
+          pse_programs_pkg
+        ];
+      };
+    in
     {
       devShells.x86_64-linux.linux = linux_shell;
-      packages.x86_64-linux.default = linux_pkg;
+      devShells.x86_64-linux.pse-programs = pse_programs_shell;
+      packages.x86_64-linux.default = combined_pkg;
       packages.x86_64-linux.linux = linux_pkg;
+      packages.x86_64-linux.pse-programs = pse_programs_pkg;
+      packages.x86_64-linux.combined = combined_pkg;
     };
   # end of let outputs
 }

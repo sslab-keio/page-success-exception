@@ -1,9 +1,18 @@
-.PHONY: build-linux build-local-linux clean
+.PHONY: build-all build-linux build-local-all build-local-linux \
+	build-local-pse-programs clean
 
 NIX ?= nix --extra-experimental-features "nix-command flakes"
+PSE_CC ?= riscv64-unknown-linux-musl-gcc
+PSE_CFLAGS ?= -O2 -Wall -Wextra -Werror -static
+PSE_TARGETS := pse_phase1 pse_multirange pse_microbench
+
+build-all:
+	$(NIX) build .#combined
 
 build-linux:
 	$(NIX) build .#linux
+
+build-local-all: build-local-linux build-local-pse-programs
 
 build-local-linux:
 	$(NIX) develop --ignore-environment '.#linux' -c \
@@ -32,7 +41,14 @@ build-local-linux:
 		make -C riscv-linux O=$(CURDIR)/riscv-linux/build \
 		-j$(shell nproc) Image modules dtbs
 
+build-local-pse-programs: $(PSE_TARGETS)
+
+$(PSE_TARGETS): %: %.c
+	$(NIX) develop --ignore-environment '.#pse-programs' -c \
+		$(PSE_CC) $(PSE_CFLAGS) -o $@ $<
+
 clean:
 	rm -f result
+	$(RM) $(PSE_TARGETS)
 	$(NIX) develop --ignore-environment '.#linux' -c \
 		make -C riscv-linux O=$(CURDIR)/riscv-linux/build clean

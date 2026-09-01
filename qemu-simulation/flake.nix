@@ -59,6 +59,76 @@
       pkgs.openssh
       pkgs.ncurses
     ]; in
+    let mk_qemu_pkg = { debug ? false }:
+      pkgs.stdenv.mkDerivation {
+        pname = "qemu-pse-riscv64" + pkgs.lib.optionalString debug "-debug";
+        version = "10.0.0-pse-a1271b7";
+
+        src = pkgs.fetchFromGitHub {
+          owner = "tokyo4j";
+          repo = "qemu";
+          rev = "a1271b7c545dd4e0bd9ccdfc74592fecd032553a";
+          hash = "sha256-/Lc4Z+GBQAtzESytfoOxItKvIn6smAakj4gCxH3m82U=";
+        };
+
+        keycodemapdb = pkgs.fetchzip {
+          url = "https://gitlab.com/qemu-project/keycodemapdb/-/archive/f5772a62ec52591ff6870b7e8ef32482371f22c6/keycodemapdb-f5772a62ec52591ff6870b7e8ef32482371f22c6.tar.gz";
+          hash = "sha256-GbZ5mrUYLXMi0IX4IZzles0Oyc095ij2xAsiLNJwfKQ=";
+        };
+
+        dtc = pkgs.fetchzip {
+          url = "https://gitlab.com/qemu-project/dtc/-/archive/b6910bec11614980a21e46fbccc35934b671bd81/dtc-b6910bec11614980a21e46fbccc35934b671bd81.tar.gz";
+          hash = "sha256-gx9LG3U9etWhPxm7Ox7rOu9X5272qGeHqZtOe68zFs4=";
+        };
+
+        nativeBuildInputs = qemu_build_inputs;
+        hardeningDisable = [ "fortify" ];
+        dontStrip = debug;
+
+        postPatch = ''
+          cp -R "$keycodemapdb" subprojects/keycodemapdb
+          cp -R "$dtc" subprojects/dtc
+          chmod -R u+w subprojects/keycodemapdb subprojects/dtc
+          patchShebangs scripts subprojects/keycodemapdb/tools
+          substituteInPlace meson.build \
+            --replace-fail "if host_os != 'emscripten'" "if false"
+        '';
+
+        configurePhase = ''
+          runHook preConfigure
+          export CC=clang
+          ./configure \
+            --prefix="$out" \
+            --target-list=riscv64-softmmu \
+            --disable-download \
+            --disable-fuse \
+            --disable-user \
+            --disable-curl \
+            ${pkgs.lib.optionalString debug "--enable-debug"} \
+            -Dfdt=internal
+          runHook postConfigure
+        '';
+
+        buildPhase = ''
+          runHook preBuild
+          ninja -C build qemu-system-riscv64
+          runHook postBuild
+        '';
+
+        installPhase = ''
+          runHook preInstall
+          mkdir -p "$out/bin"
+          cp build/qemu-system-riscv64 "$out/bin/"
+          runHook postInstall
+        '';
+
+        meta.mainProgram = "qemu-system-riscv64";
+      };
+    in
+    let qemu_pkg = mk_qemu_pkg { };
+    in
+    let qemu_debug_pkg = mk_qemu_pkg { debug = true; };
+    in
     let qemu_shell =
       pkgs.mkShell {
         hardeningDisable = [ "fortify" ];
@@ -274,7 +344,152 @@
         '';
       };
     in
+    let linux_initramfs_pkg =
+      pkgs.runCommand "linux-initramfs-pse" {
+        nativeBuildInputs = [
+          pkgs.cpio
+          pkgs.fakeroot
+          pkgs.findutils
+          pkgs.gzip
+        ];
+      } ''
+        root="$TMPDIR/root"
+        mkdir -p \
+          "$root"/{bin,sbin,dev,etc,home,mnt,proc,sys,usr,tmp} \
+          "$root"/usr/{bin,sbin} \
+          "$root"/proc/sys/kernel
+
+        cp ${busybox_pkg}/busybox/busybox "$root/bin/busybox"
+        install -m 0755 ${pkgs.writeText "pse-init" ''
+          #!/bin/busybox sh
+          /bin/busybox --install -s
+          mount -t devtmpfs devtmpfs /dev
+          mount -t proc proc /proc
+          mount -t sysfs sysfs /sys
+          mount -t tmpfs tmpfs /tmp
+          setsid cttyhack sh
+          echo /sbin/mdev > /proc/sys/kernel/hotplug
+          mdev -s
+          sh
+        ''} "$root/init"
+
+        fakeroot -s "$TMPDIR/fakeroot.state" -- \
+          mknod "$root/dev/sda" b 8 0
+        fakeroot -i "$TMPDIR/fakeroot.state" -s "$TMPDIR/fakeroot.state" -- \
+          mknod "$root/dev/console" c 5 1
+
+        find "$root" -exec touch -h -d '@1' {} +
+        mkdir -p "$out"
+        cd "$root"
+        find . -print0 \
+          | sort -z \
+          | fakeroot -i "$TMPDIR/fakeroot.state" -- \
+              cpio --null --create --format=newc --owner=0:0 --reproducible \
+          | gzip -9n > "$out/initramfs.cpio.gz"
+      '';
+    in
+    let xvisor_initramfs_pkg =
+      pkgs.runCommand "xvisor-initramfs-pse" {
+        nativeBuildInputs = [ pkgs.cpio pkgs.findutils ];
+      } ''
+        root="$TMPDIR/root"
+        mkdir -p "$root/system" "$root/images/riscv/virt64"
+
+        cp ${xvisor_pkg}/xvisor/build/banner.txt "$root/system/banner.txt"
+        cp ${xvisor_pkg}/xvisor/build/logo.ppm "$root/system/logo.ppm"
+        cp ${xvisor_pkg}/xvisor/build/virt64-guest.dtb "$root/images/riscv/virt64-guest.dtb"
+        cp ${xvisor_pkg}/xvisor/build/firmware.bin "$root/images/riscv/virt64/firmware.bin"
+        cp ${xvisor_pkg}/xvisor/build/nor_flash.list "$root/images/riscv/virt64/nor_flash.list"
+        cp ${xvisor_pkg}/xvisor/build/cmdlist "$root/images/riscv/virt64/cmdlist"
+        cp ${xvisor_pkg}/xvisor/build/boot.xscript "$root/boot.xscript"
+        cp ${linux_pkg}/linux/build/Image "$root/images/riscv/virt64/Image"
+        cp ${xvisor_pkg}/xvisor/build/virt64.dtb "$root/images/riscv/virt64/virt64.dtb"
+        cp ${linux_initramfs_pkg}/initramfs.cpio.gz "$root/images/riscv/virt64/rootfs.img"
+
+        find "$root" -exec touch -h -d '@1' {} +
+        mkdir -p "$out"
+        cd "$root"
+        find . -print0 \
+          | sort -z \
+          | cpio --null --create --format=newc --owner=0:0 --reproducible \
+          > "$out/xvisor-initrd.cpio"
+      '';
+    in
+    let xv6_runner =
+      pkgs.writeShellScriptBin "run-xv6" ''
+        qemu=${qemu_pkg}/bin/qemu-system-riscv64
+        if [[ "''${1:-}" == "--debug" ]]; then
+          qemu=${qemu_debug_pkg}/bin/qemu-system-riscv64
+          shift
+        fi
+
+        exec "$qemu" \
+          -M virt \
+          -m 256M \
+          -smp 1 \
+          -nographic \
+          -global virtio-mmio.force-legacy=false \
+          -drive file=${xv6_pkg}/xv6/build/fs.img,if=none,format=raw,id=x0 \
+          -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+          -snapshot \
+          -bios none \
+          -kernel ${xv6_pkg}/xv6/build/kernel \
+          "$@"
+      '';
+    in
+    let linux_runner =
+      pkgs.writeShellScriptBin "run-linux" ''
+        qemu=${qemu_pkg}/bin/qemu-system-riscv64
+        if [[ "''${1:-}" == "--debug" ]]; then
+          qemu=${qemu_debug_pkg}/bin/qemu-system-riscv64
+          shift
+        fi
+
+        exec "$qemu" \
+          -M virt \
+          -m 256M \
+          -smp 1 \
+          -nographic \
+          -global virtio-mmio.force-legacy=false \
+          -bios ${opensbi_pkg}/opensbi/share/opensbi/lp64/generic/firmware/fw_dynamic.bin \
+          -kernel ${linux_pkg}/linux/build/Image \
+          -initrd ${linux_initramfs_pkg}/initramfs.cpio.gz \
+          -append "console=ttyS0 init=/init" \
+          "$@"
+      '';
+    in
+    let xvisor_runner =
+      pkgs.writeShellScriptBin "run-xvisor" ''
+        qemu=${qemu_pkg}/bin/qemu-system-riscv64
+        if [[ "''${1:-}" == "--debug" ]]; then
+          qemu=${qemu_debug_pkg}/bin/qemu-system-riscv64
+          shift
+        fi
+
+        exec "$qemu" \
+          -M virt \
+          -m 512M \
+          -nographic \
+          -bios ${opensbi_pkg}/opensbi/share/opensbi/lp64/generic/firmware/fw_dynamic.bin \
+          -kernel ${xvisor_pkg}/xvisor/build/vmm.bin \
+          -initrd ${xvisor_initramfs_pkg}/xvisor-initrd.cpio \
+          -append 'vmm.bootcmd="vfs mount initrd /; vfs run /boot.xscript; guest kick guest0; vserial bind guest0/uart0;"' \
+          "$@"
+      '';
+    in
     {
+      apps.x86_64-linux.linux = {
+        type = "app";
+        program = "${linux_runner}/bin/run-linux";
+      };
+      apps.x86_64-linux.xv6 = {
+        type = "app";
+        program = "${xv6_runner}/bin/run-xv6";
+      };
+      apps.x86_64-linux.xvisor = {
+        type = "app";
+        program = "${xvisor_runner}/bin/run-xvisor";
+      };
       devShells.x86_64-linux = {
         qemu = qemu_shell;
         xv6 = xv6_shell;
@@ -284,7 +499,7 @@
         busybox = busybox_shell;
       };
       packages.x86_64-linux.default = pkgs.symlinkJoin {
-        name = "combined";
+        name = "pse-packages";
 
         paths = [
           xv6_pkg
@@ -292,8 +507,15 @@
           opensbi_pkg
           xvisor_pkg
           busybox_pkg
+          qemu_pkg
+          linux_initramfs_pkg
+          xvisor_initramfs_pkg
         ];
       };
+      packages.x86_64-linux.linux-initramfs = linux_initramfs_pkg;
+      packages.x86_64-linux.qemu = qemu_pkg;
+      packages.x86_64-linux.qemu-debug = qemu_debug_pkg;
       packages.x86_64-linux.xvisor = xvisor_pkg;
+      packages.x86_64-linux.xvisor-initramfs = xvisor_initramfs_pkg;
     };
 }

@@ -4,83 +4,78 @@ This directory contains the implementation and evaluation of the Page Success Ex
 
 The QEMU-based environment is used to implement the proposed hardware support, integrate it with the relevant system software, and evaluate whether the mechanism is feasible. It provides a controllable platform for validating the behavior of Page Success Exception before considering a hardware implementation.
 
-## Build model
-
-This repository uses two different source workflows to balance highly reproducible Nix builds with convenient local development.
-
-The outputs of `nix build` are the finished, reproducible artifacts. The repositories, commit IDs, and source hashes used to produce them are specified directly in `flake.nix` with `pkgs.fetchFromGitHub`. If you only want to build and run the project without modifying its component source code, use the Nix build workflow. You do not need to initialize the xv6, Linux, OpenSBI, BusyBox, or XVisor submodules.
-
-The Git submodules provide writable source trees for development. Initialize the relevant submodule when you want to modify xv6, Linux, OpenSBI, BusyBox, or XVisor and test the changes locally. The development shells defined in `flake.nix` provide the same build dependencies used by the corresponding Nix package, so `nix develop` supplies the tools required to build each local source tree.
-
-After a local change is ready to become part of the reproducible build, commit it in the component repository and update its commit ID and source hash in `flake.nix`. Until those values are updated, `nix build` continues to build the pinned source rather than the locally modified submodule.
-
-QEMU is the exception: QEMU itself is built from its Git submodule inside the `nix develop .#qemu` shell. Its source is not fetched by a `pkgs.fetchFromGitHub` derivation. The Makefile handles this workflow through `make setup-qemu` and `make build-qemu`.
-
-The Makefile provides a simple interface for these Nix workflows, so most users do not need to invoke the underlying Nix commands directly. Run `make build-all` to build all finished artifacts from their pinned sources. For local development, build QEMU first with `make setup-qemu` and `make build-qemu`, then use `make build-local-all` to build the other local source trees and regenerate the initramfs images used by the run commands.
-
 ## Prerequisites
 
-- [Nix](https://nixos.org/download/) must be installed. The Makefile enables the `nix-command` and `flakes` experimental features when invoking Nix.
-- `make` is required to run the build and launch commands.
-- `sudo` access is required when creating the device nodes in the BusyBox initramfs.
+- [Nix](https://nixos.org/download/) with flakes enabled
 
 ## Reproducible artifacts
 
 ```sh
-make build-all
+nix build .
 ```
 
-`make build-all` builds all finished artifacts: QEMU, xv6, Linux, OpenSBI, BusyBox, and XVisor. It then generates the BusyBox and XVisor initramfs images required by the run commands.
+This builds all finished artifacts: QEMU, xv6, Linux, OpenSBI, BusyBox, XVisor, and the Linux and XVisor initramfs images. The component repositories, revisions, and source hashes are pinned in `flake.nix`; Git submodules do not need to be initialized.
 
-The xv6, Linux, OpenSBI, BusyBox, and XVisor artifacts are produced by `nix build` from the repositories and revisions pinned in `flake.nix`. This workflow does not download or initialize their Git submodules. QEMU remains the exception described above and is built from its submodule in the Nix development shell.
-
-## Local development environments
-
-The flake provides a development shell for each component. Each shell uses the same build dependencies as the corresponding Nix package, so a locally modified submodule can be built in an environment similar to the package build.
-
-For the usual local-development workflow, run:
+After the build, launch each environment with one command:
 
 ```sh
-make setup-qemu
-make build-qemu
-make build-local-all
+nix run .#xv6
+nix run .#linux
+nix run .#xvisor
 ```
 
-The first two commands initialize, configure, and build QEMU. `make build-local-all` does not build QEMU; it initializes the xv6, Linux, OpenSBI, BusyBox, and XVisor submodules with Git provided by Nix, builds those five local source trees in their Nix development shells, replaces the corresponding artifacts under `build/`, and regenerates the BusyBox and XVisor initramfs images. The local build targets run their corresponding setup targets automatically, so the host system's Git command is not used.
+The commands boot xv6, Linux, and XVisor respectively on the PSE-enabled QEMU. Detailed execution examples are shown below.
 
-To initialize the submodules without building them, use `make setup-local-pkgs`. To initialize only one component, use `make setup-xv6`, `make setup-linux`, `make setup-xvisor`, `make setup-busybox`, or `make setup-opensbi`.
-
-The Makefile provides convenient targets for building individual local submodules. Each target automatically uses the appropriate Nix development shell and replaces the corresponding artifact under `build/`, so you normally do not need to enter the shell manually:
+To build only the PSE-enabled RISC-V QEMU:
 
 ```sh
-make build-local-xv6
-make build-local-linux
-make build-local-opensbi
-make build-local-busybox
-make build-local-xvisor
+nix build .#qemu
 ```
 
-Use `make build-local-pkgs` to run all five targets. Use `make build-local-all` to also regenerate the BusyBox and XVisor initramfs images. Like `make build-all`, initramfs generation may require `sudo` to create device nodes.
-
-After a local build, the existing `make run-xv6`, `make run-linux`, and `make run-xvisor` commands use the replaced artifacts from `build/`. Running `make build-pkgs` again replaces them with artifacts produced by `nix build`.
-
-### Building QEMU for debugging
-
-QEMU must be configured with `--enable-debug` when it is needed for debugging. Set the Makefile variable `QEMU_DEBUG` to `1` when running the setup command, then build QEMU:
+The resulting executable is `result/bin/qemu-system-riscv64`. It can also be invoked directly through the flake:
 
 ```sh
-make setup-qemu QEMU_DEBUG=1
-make build-qemu
+nix run .#qemu -- --version
 ```
 
-The setup target adds `--enable-debug` to QEMU's configure options when `QEMU_DEBUG=1` is specified. When `QEMU_DEBUG` is omitted, QEMU is built without `--enable-debug`. `make build-all` always uses this non-debug configuration.
+The `qemu` package is the optimized release build and is stripped during the Nix fixup phase. To build QEMU with its debug configuration and retain debug symbols, use:
+
+```sh
+nix build .#qemu-debug
+```
+
+### Building the initramfs images
+
+Build the BusyBox initramfs used to boot Linux with:
+
+```sh
+nix build .#linux-initramfs
+```
+
+The result is `result/initramfs.cpio.gz`. The build creates the required device-node metadata without `sudo`.
+
+Build the XVisor initramfs with:
+
+```sh
+nix build .#xvisor-initramfs
+```
+
+The result is `result/xvisor-initrd.cpio`. It contains the XVisor boot files, Linux kernel, device trees, guest firmware, and the BusyBox root filesystem produced by `linux-initramfs`.
 
 ## Running
 
 ### Booting xv6
 
 ```sh
-make run-xv6
+nix run .#xv6
+```
+
+This runs the xv6 artifacts built by Nix on the PSE-enabled QEMU package directly; it does not enter a nested development shell. The filesystem uses a temporary QEMU snapshot because Nix store artifacts are immutable.
+
+To run xv6 with the debug QEMU package instead of the release build, use:
+
+```sh
+nix run .#xv6 -- --debug
 ```
 
 After xv6 boots, run `etest` at the shell prompt. The expected output is:
@@ -104,8 +99,10 @@ result=213D0
 ### Booting Linux
 
 ```sh
-make run-linux
+nix run .#linux
 ```
+
+Use `nix run .#linux -- --debug` to boot it with the debug QEMU package.
 
 A successful boot reaches the BusyBox shell prompt and produces output similar to:
 
@@ -125,8 +122,10 @@ home               mnt                sys
 ### Booting XVisor
 
 ```sh
-make run-xvisor
+nix run .#xvisor
 ```
+
+Use `nix run .#xvisor -- --debug` to boot it with the debug QEMU package.
 
 XVisor creates and starts `guest0`, then binds the terminal to the guest's serial console. The expected output ends at the guest firmware's `basic#` prompt:
 

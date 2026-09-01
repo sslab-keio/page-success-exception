@@ -210,7 +210,7 @@
         '';
       };
     in
-    let combined_pkg =
+    let all_pkg =
       pkgs.symlinkJoin {
         name = "p550-simulation";
         paths = [
@@ -222,10 +222,10 @@
     {
       devShells.x86_64-linux.linux = linux_shell;
       devShells.x86_64-linux.pse-programs = pse_programs_shell;
-      packages.x86_64-linux.default = combined_pkg;
+      packages.x86_64-linux.default = all_pkg;
       packages.x86_64-linux.linux = linux_pkg;
       packages.x86_64-linux.pse-programs = pse_programs_pkg;
-      packages.x86_64-linux.combined = combined_pkg;
+      packages.x86_64-linux.all = all_pkg;
     };
   # end of let outputs
 }

@@ -24,6 +24,160 @@ For a user process, the simulation proceeds as follows:
 
 Steps 4 and 5 are repeated throughout execution. This keeps TLB hits on previously installed translations fast while using page-fault handling to model the additional work associated with PSE on TLB misses.
 
+## Build and installation
+
+### Prerequisite
+
+- [Nix](https://nixos.org/download/) with flakes enabled
+
+### Build the software
+
+Run the following command in the `p550-simulation` directory:
+
+```sh
+nix build .
+```
+
+The `result/` symlink contains everything needed for the experiment:
+
+- `result/linux-image-*-riscv64.deb`: the RISC-V Linux kernel Debian package
+- `result/bin/pse_phase1`: the single-range functional test
+- `result/bin/pse_multirange`: the multi-range functional test
+- `result/bin/pse_microbench`: the PSE microbenchmark
+
+The kernel package filename includes the kernel release. Check the generated filename with:
+
+```sh
+ls -lh result/linux-image-*-riscv64.deb
+```
+
+### Install the kernel on the RISC-V machine
+
+The following examples assume that the RISC-V machine is named `p550` and that its login user is `ubuntu`. Adjust the hostname, username, and destination path for your environment.
+
+Copy the package to the RISC-V machine:
+
+```sh
+scp result/linux-image-*-riscv64.deb ubuntu@p550:/tmp/
+```
+
+Log in to the machine:
+
+```sh
+ssh ubuntu@p550
+```
+
+Verify that both the machine and the package use the `riscv64` architecture:
+
+```sh
+dpkg --print-architecture
+dpkg-deb --field /tmp/linux-image-*-riscv64.deb \
+  Package Version Architecture
+```
+
+Install the package:
+
+```sh
+sudo dpkg -i /tmp/linux-image-*-riscv64.deb
+```
+
+The package installs:
+
+- `/boot/Image-<kernel-release>`
+- `/boot/vmlinuz-<kernel-release>`, a symbolic link to the kernel image
+- `/boot/System.map-<kernel-release>`
+- `/boot/config-<kernel-release>`
+- `/boot/dtbs/<kernel-release>/`
+- `/usr/lib/linux-image-<kernel-release>/`, containing DTBs for `flash-kernel`
+- `/lib/modules/<kernel-release>/`
+
+Verify the installation:
+
+```sh
+dpkg-query -W linux-image-p550-custom
+ls -l /boot/*p550-custom*
+ls -ld /boot/dtbs/*p550-custom* /lib/modules/*p550-custom*
+```
+
+### Generate the initramfs
+
+The Debian package does not generate an initramfs automatically. Install `initramfs-tools` on the RISC-V machine and obtain the kernel release from the installed package version:
+
+```sh
+sudo apt-get update
+sudo apt-get install initramfs-tools
+
+KREL=$(dpkg-query -W -f='${Version}' linux-image-p550-custom)
+echo "$KREL"
+```
+
+Update the module dependencies and create the initial initramfs:
+
+```sh
+sudo depmod -a "$KREL"
+sudo update-initramfs -c -k "$KREL"
+```
+
+If the `flash-kernel` hook fails on a P550 that boots with EFI and GRUB, disable it for this invocation:
+
+```sh
+sudo env FK_MACHINE=none update-initramfs -c -k "$KREL"
+```
+
+Verify the generated initramfs and confirm that it contains the modules for the new kernel:
+
+```sh
+ls -lh "/boot/initrd.img-$KREL"
+lsinitramfs "/boot/initrd.img-$KREL" \
+  | grep "/lib/modules/$KREL/" \
+  | head
+```
+
+Use `-u` to regenerate an initramfs for the same release, or `-d` to remove it:
+
+```sh
+sudo update-initramfs -u -k "$KREL"
+sudo update-initramfs -d -k "$KREL"
+```
+
+Generate the initramfs on the target RISC-V machine rather than the x86_64 build machine because it depends on the target's storage configuration and system settings.
+
+### Update the bootloader and reboot
+
+On a GRUB-based system, update the GRUB configuration:
+
+```sh
+sudo update-grub
+```
+
+Confirm that the output contains the new kernel and initramfs, for example:
+
+```text
+Found linux image: /boot/vmlinuz-6.6.77-p550-custom3
+Found initrd image: /boot/initrd.img-6.6.77-p550-custom3
+```
+
+If the machine uses another bootloader, such as U-Boot, add `/boot/Image-$KREL`, `/boot/initrd.img-$KREL`, and the appropriate DTB from `/boot/dtbs/$KREL/` to its configuration instead.
+
+Keep a working boot entry for the existing kernel, then reboot and verify the running release:
+
+```sh
+sudo reboot
+uname -r
+```
+
+An expected release is `6.6.77-p550-custom3`.
+
+To uninstall the package, first boot a different kernel, then remove the generated initramfs and symbolic link, uninstall the package, and update GRUB:
+
+```sh
+KREL=$(dpkg-query -W -f='${Version}' linux-image-p550-custom)
+sudo update-initramfs -d -k "$KREL"
+sudo rm "/boot/vmlinuz-$KREL"
+sudo dpkg -r linux-image-p550-custom
+sudo update-grub
+```
+
 ## Linux kernel implementation
 
 The experimental kernel support is controlled by `CONFIG_RISCV_PSE_EXPERIMENT`, which is available only on 64-bit RISC-V systems with an MMU. The implementation adds the following components to `riscv-linux`:
@@ -88,13 +242,7 @@ Each `prctl()` returns zero on success and `-1` in userspace on failure, with `e
 
 ## Experiment programs
 
-The repository contains two functional tests and one measurement-oriented microbenchmark. Build the local RISC-V binaries with:
-
-```sh
-make build-local-pse-programs
-```
-
-This produces statically linked `pse_phase1`, `pse_multirange`, and `pse_microbench` executables that can be copied to the P550. `make build-local-all` builds these programs together with the local Linux kernel. The reproducible `make build-all` output instead places the programs under `result/bin/`.
+The repository contains two functional tests and one measurement-oriented microbenchmark. `nix build .` produces statically linked `pse_phase1`, `pse_multirange`, and `pse_microbench` executables under `result/bin/`; copy them to the P550 to run the experiments.
 
 ### `pse_phase1`
 
